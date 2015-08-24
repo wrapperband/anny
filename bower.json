@@ -18,6 +18,7 @@
     "vis": "~4.4.0",
     "ionicons": "~2.0.1",
     "lodash": "~3.10.0",
-    "mathjs": "~2.1.1"
+    "mathjs": "~2.1.1",
+    "paralleljs": "*"
   }
 }
