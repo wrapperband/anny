@@ -59,9 +59,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	  ERROR: __webpack_require__(2),
 	  INITIALIZE: __webpack_require__(3),
 	  Layer: __webpack_require__(4),
-	  Network: __webpack_require__(6),
+	  Network: __webpack_require__(8),
 	  Neuron: __webpack_require__(5),
-	  util: __webpack_require__(7)
+	  util: __webpack_require__(9)
 	};
 
 	module.exports = anny;
@@ -84,7 +84,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	   */
 	  rectifier: function rectifier(x) {
 	    // https://en.wikipedia.org/wiki/Rectifier
-	    return math.max(0, x);
+	    return Math.max(0, x);
 	  },
 
 	  /**
@@ -96,7 +96,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	   */
 	  rectifierDerivative: function rectifierDerivative(x) {
 	    // https://en.wikipedia.org/wiki/Rectifier
-	    return 1 / (1 + math.exp(-x));
+	    return 1 / (1 + Math.exp(-x));
 	  },
 
 	  /**
@@ -107,7 +107,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	   */
 	  softplus: function softplus(x) {
 	    // https://en.wikipedia.org/wiki/Rectifier_(neural_networks)
-	    return math.log(1 + math.exp(x));
+	    return Math.log(1 + Math.exp(x));
 	  },
 
 	  /**
@@ -117,7 +117,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	   */
 	  softplusDerivative: function softplusDerivative(x) {
 	    // https://en.wikipedia.org/wiki/Rectifier_(neural_networks)
-	    return math.log(1 + math.exp(x));
+	    return Math.log(1 + Math.exp(x));
 	  },
 
 	  /**
@@ -128,7 +128,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	   */
 	  logistic: function logistic(x) {
 	    // 4.4 The Sigmoid Fig. 4.a, Not recommended.
-	    return 1 / (1 + math.exp(-x));
+	    return 1 / (1 + Math.exp(-x));
 	  },
 
 	  /**
@@ -137,7 +137,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	   */
 	  logisticDerivative: function logisticDerivative(x) {
 	    // 4.4 The Sigmoid Fig. 4.a, Not recommended.
-	    var val = 1 / (1 + math.exp(-x));
+	    var val = 1 / (1 + Math.exp(-x));
 	    return val * (1 - val);
 	  },
 
@@ -169,8 +169,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	   * @param {number} x
 	   */
 	  tanh: function tanh(x) {
-	    var negExp = math.exp(-x);
-	    var posExp = math.exp(x);
+	    var negExp = Math.exp(-x);
+	    var posExp = Math.exp(x);
 	    return (posExp - negExp) / (posExp + negExp);
 	  },
 
@@ -180,24 +180,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	   * @returns {number}
 	   */
 	  tanhDerivative: function tanhDerivative(x) {
-	    return 1 - math.pow(math.tanh(x), 2);
-	  },
-
-	  /**
-	   * Modified hyperbolic tangent function.  Optimized for faster convergence.
-	   * @returns {number}
-	   */
-	  optimalTanh: function optimalTanh(x) {
-	    return 1.7159 * math.tanh(x * 2 / 3);
-	  },
-
-	  /**
-	   * The derivative of the modified hyperbolic tangent function.
-	   * @returns {number}
-	   */
-	  optimalTanhDerivative: function optimalTanhDerivative(x) {
-	    return 1.14393 * math.sech(x * 2 / 3);
+	    return 1 - Math.pow(Math.tanh(x), 2);
 	  }
+
+	  // These cannot be parallelized because the derivative uses math.js the
+	  // hyperbolic secant function.
+	  //
+	  // /**
+	  //  * Modified hyperbolic tangent function.  Optimized for faster convergence.
+	  //  * @returns {number}
+	  //  */
+	  // optimalTanh: function optimalTanh(x) {
+	  //   return 1.7159 * Math.tanh(x * 2 / 3);
+	  // },
+	  //
+	  // /**
+	  //  * The derivative of the modified hyperbolic tangent function.
+	  //  * @returns {number}
+	  //  */
+	  // optimalTanhDerivative: function optimalTanhDerivative(x) {
+	  //   return 1.14393 * Math.sech(x * 2 / 3);
+	  // }
 	};
 
 	module.exports = ACTIVATION;
@@ -288,6 +291,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var INITIALIZE = __webpack_require__(3);
 	var Neuron = __webpack_require__(5);
+	var parallelizer = __webpack_require__(6);
 
 	/**
 	 * Creates a single dimension Layer of Neurons.
@@ -297,6 +301,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 */
 	function Layer(numNeurons, addBias) {
 	  var self = this;
+	  self.id = Layer.count++;
 	  self.neurons = [];
 
 	  // add neurons
@@ -311,6 +316,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    self.neurons.push(biasNeuron);
 	  }
 	}
+
+	Layer.count = 0;
 
 	/**
 	 * Connects every Neuron in this Layer to each Neuron in the `target` Layer.
@@ -336,9 +343,36 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @returns {number[]} - Array of Neuron output values.
 	 */
 	Layer.prototype.activate = function(values) {
-	  return _.map(this.neurons, function(neuron, i) {
-	    return neuron.activate(values ? values[i] : undefined);
+	  // console.debug('[l' + this.id + '] layer.activate() with:', values);
+	  var self = this;
+	  var data = _.map(self.neurons, function(neuron, i) {
+	    return {
+	      neuron: parallelizer.serialize(neuron),
+	      value: typeof values !== 'undefined' ? values[i] : undefined
+	    };
 	  });
+
+	  // parallelizer.map() => Promise
+	  return parallelizer.map(data, {}, function(item) {
+	    // parse function strings back into functions :(
+	    item.neuron.activate = eval('(' + item.neuron.activate + ')');
+	    item.neuron.activationFn = eval('(' + item.neuron.activationFn + ')');
+	    item.neuron.activationDerivative =
+	      eval('(' + item.neuron.activationDerivative + ')');
+
+	    return item.neuron.activate(item.neuron, item.value);
+	  })
+	    .then(function(results) {
+	      // console.debug('[l' + self.id + '] layer.activate() success', results);
+	      _.each(self.neurons, function(neuron, i) {
+	        neuron.output = results[i];
+	      });
+	      return results;
+	    });
+
+	  // return _.map(this.neurons, function(neuron, i) {
+	  //   return neuron.activate(values ? values[i] : undefined);
+	  // });
 	};
 
 	/**
@@ -413,7 +447,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	Neuron.prototype.train = function(targetOutput) {
 	  var inputDerivative = this.activationDerivative(this.input);
 
-	  if (!_.isUndefined(targetOutput)) {
+	  if (typeof targetOutput !== 'undefined') {
 	    this.error = targetOutput - this.output;
 	  }
 
@@ -429,20 +463,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	    if (this.isOutput()) {
 	      this.delta = -this.error * inputDerivative;
 	    } else {
-	      this.delta = _.sum(this.outgoing, function(connection) {
-	        return inputDerivative * connection.weight * connection.target.delta;
-	      });
+	      var i;
+	      var connectionIn;
+	      this.delta = 0;
+	      for (i = 0; i < this.outgoing.length; i++) {
+	        connectionIn = this.outgoing[i];
+	        this.delta +=
+	          inputDerivative * connectionIn.weight * connectionIn.target.delta;
+	      }
 	    }
 	  }
 
 	  // adjust weights
-	  _.each(this.outgoing, function(connection) {
+	  var j;
+	  var connectionOut;
+	  for (j = 0; j < this.outgoing.length; j++) {
+	    connectionOut = this.outgoing[j];
 	    // get gradient
 	    // https://youtu.be/p1-FiWjThs8?t=12m21s
-	    var gradient = this.output * connection.target.delta;
+	    var gradientOut = this.output * connectionOut.target.delta;
 
-	    connection.weight -= gradient * this.learningRate;
-	  }, this);
+	    connectionOut.weight -= gradientOut * this.learningRate;
+	  }
 	};
 
 	/**
@@ -455,6 +497,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @returns {number}
 	 */
 	Neuron.prototype.activate = function(input) {
+	  // console.debug('neuron.activate() with:', values);
 	  if (this.isBias) {
 	    this.output = 1;
 	    return this.output;
@@ -464,12 +507,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	  if (!_.isUndefined(input)) {
 	    this.input = input;
 	  } else {
-	    this.input = _.sum(this.incoming, function(connection) {
+	    var connection;
+	    this.input = 0;
+	    for (var i = 0; i < this.incoming.length; i += 1) {
+	      connection = this.incoming[i];
 	      // we don't need to add the bias neuron manually here.
 	      // since the bias Neuron is connected like all other Neurons and it's
 	      // output is always 1, the weight will be added by bias.output * weight.
-	      return connection.source.output * connection.weight;
-	    });
+	      this.input += connection.source.output * connection.weight;
+	    }
 	  }
 
 	  // set the output
@@ -518,8 +564,118 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 6 */
 /***/ function(module, exports, __webpack_require__) {
 
+	var Promise = __webpack_require__(7);
+	var Parallelizer = {};
+
+	function activate(parNeuron, value) {
+	  // console.debug(
+	  //   'parallelizer n' + parNeuron.id + '.activate() with:', parNeuron, value
+	  // );
+	  if (parNeuron.isBias) {
+	    parNeuron.output = 1;
+	    return parNeuron.output;
+	  }
+
+	  //
+	  // Input
+	  //
+	  if (typeof value !== 'undefined') {
+	    parNeuron.input = value;
+	  } else {
+	    var connection;
+	    var parNeuronCount = typeof parNeuron.incoming !== 'undefined'
+	      ? parNeuron.incoming.length
+	      : 0;
+	    parNeuron.input = 0;
+	    for (var i = 0; i < parNeuronCount; i += 1) {
+	      connection = parNeuron.incoming[i];
+	      // we don't need to add the bias parNeuron manually here.
+	      // since the bias Neuron is connected like all other Neurons and it's
+	      // output is always 1, the weight will be added by bias.output * weight.
+	      parNeuron.input += connection.source.output * connection.weight;
+	    }
+	  }
+
+	  //
+	  // Output
+	  //
+	  // do not squash input Neurons values, pass them straight through
+	  parNeuron.output = parNeuron.isInput
+	    ? parNeuron.input
+	    : parNeuron.activationFn(parNeuron.input);
+
+	  return parNeuron.output;
+	}
+
+	/**
+	 * Serialize a `neuron` into an object literal for use in a web worker.
+	 * @param {Neuron} neuron - The Neuron to serialize.
+	 * @returns {object}
+	 */
+	Parallelizer.serialize = function(neuron) {
+	  return {
+	    id: neuron.id,
+	    activate: activate.toString(),
+	    activationFn: neuron.activationFn.toString(),
+	    activationDerivative: neuron.activationDerivative.toString(),
+	    isBias: neuron.isBias,
+	    isInput: neuron.isInput(),
+	    delta: neuron.delta,
+	    error: neuron.error,
+	    input: neuron.input,
+	    output: neuron.output,
+	    incoming: _.map(neuron.incoming, function(connection) {
+	      return {
+	        weight: connection.weight,
+	        source: {
+	          output: connection.source.output
+	        }
+	      };
+	    }),
+	    outgoing: _.map(neuron.outgoing, function(connection) {
+	      return {
+	        weight: connection.weight,
+	        target: {
+	          delta: connection.target.delta
+	        }
+	      };
+	    })
+	  };
+	};
+
+	Parallelizer.map = function(array, environment, callback) {
+	  // console.debug('parallelizer.map() with:', array, environment, callback);
+	  callback.name = callback.name || 'mapPar';
+
+	  return new Promise(function(resolve, reject) {
+	    var parallel = new Parallel(array, {env: environment});
+
+	    parallel.map(callback).then(function() {
+	      // console.debug('parallelizer.map() success:', parallel);
+	      resolve(parallel.data);
+	    }, function(error) {
+	      reject(error);
+	    });
+	  });
+	};
+
+	module.exports = Parallelizer;
+
+
+/***/ },
+/* 7 */
+/***/ function(module, exports) {
+
+	module.exports = Promise || Zousan;
+
+
+/***/ },
+/* 8 */
+/***/ function(module, exports, __webpack_require__) {
+
 	var Layer = __webpack_require__(4);
 	var ERROR = __webpack_require__(2);
+	var Promise = __webpack_require__(7);
 
 	/**
 	 * Creates a Network of Layers consisting of Neurons. Each array element
@@ -584,10 +740,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @returns {*} output values
 	 */
 	Network.prototype.activate = function(inputs) {
-	  this.inputLayer.activate(inputs);
-	  _.invoke(this.hiddenLayers, 'activate');
-	  this.output = this.outputLayer.activate();
-	  return this.output;
+	  // console.debug('network.activate() with:', inputs);
+	  var self = this;
+
+	  // this.inputLayer.activate(inputs);
+	  // _.invoke(this.hiddenLayers, 'activate');
+	  // this.output = this.outputLayer.activate();
+	  // return this.output;
+
+	  return new Promise(function(resolve, reject) {
+	    self.inputLayer.activate(inputs)
+	      .then(function() {
+	        return self.outputLayer.activate();
+	      })
+	      .then(function(prevLayerOutput) {
+	        self.output = prevLayerOutput;
+	        resolve(self.output);
+	      })
+	      .catch(function(error) {
+	        reject(error);
+	      });
+	  });
 	};
 
 	/**
@@ -597,6 +770,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *   layer.
 	 */
 	Network.prototype.correct = function(output) {
+	  // console.debug('network.correct() with:', output);
 	  this.outputLayer.train(output);
 
 	  // train hidden layers in reverse (last to first)
@@ -617,59 +791,123 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *   logging the current error.
 	 */
 	Network.prototype.train = function(data, callback, frequency) {
-	  // TODO: validation and help on the data.
-	  //  ensure it is normalized between -1 and 1
-	  //  ensure the input length matches the number of Network inputs
-	  //  ensure the output length matches the number of Network outputs
-	  var epochs = 50000;
-	  var errorThreshold = 0.001;
-	  var callbackFrequency = frequency || _.max([1, _.floor(epochs / 20)]);
+	  var self = this;
 
-	  var defaultCallback = function(err, epoch) {
-	    console.log('epcoh', epoch, 'error:', err);
-	  };
+	  return new Promise(function(resolve, reject) {
+	    console.debug('network.train()');
+	    // TODO: validation and help on the data.
+	    //  ensure it is normalized between -1 and 1
+	    //  ensure the input length matches the number of Network inputs
+	    //  ensure the output length matches the number of Network outputs
+	    var epochs = 50000;
+	    var errorThreshold = 0.001;
+	    var callbackFrequency = frequency || _.max([1, _.floor(epochs / 20)]);
 
-	  _.each(_.range(epochs), function(index) {
-	    var n = index + 1;
+	    var epochCounter = 0;
+	    var sampleCounter = 0;
+	    var avgError = 0;
 
-	    // loop over the training data summing the error of all samples
-	    // http://www.researchgate.net/post
-	    //   /Neural_networks_and_mean-square_errors#rgw51_55cb2f1399589
-	    var avgError = _.sum(_.map(data, function(sample) {
+	    var success = function success() {
+	      var successMsg = [
+	        'Successfully trained to an error of', avgError,
+	        'after', epochCounter, 'epochs.'
+	      ].join(' ');
+
+	      console.debug(successMsg);
+	      resolve(successMsg);
+	    };
+
+	    var fail = function fail() {
+	      var errorMsg = [
+	        'Failed to train. Error is', avgError, 'after', epochCounter, 'epochs.'
+	      ].join(' ');
+
+	      console.warn(errorMsg);
+	      reject(errorMsg);
+	    };
+
+	    var defaultCallback = function defaultCallback(err, epoch) {
+	      console.log('[training] epoch:', epoch, 'error:', err);
+	    };
+
+	    var nextSample = function nextSample() {
+	      // console.debug('network.train() nextSample()');
+	      var sample = data[sampleCounter++];
+
 	      // make a prediction
-	      this.activate(sample.input);
+	      self.activate(sample.input).then(function(output) {
+	        // console.debug('network.activate() success =>', output);
+	        // correct the error
+	        self.correct(sample.output);
 
-	      // correct the error
-	      this.correct(sample.output);
+	        // get the error
+	        avgError += self.errorFn(sample.output, self.output) / data.length;
 
-	      // get the error
-	      return this.errorFn(sample.output, this.output) / data.length;
-	    }, this));
+	        // success
+	        if (avgError <= errorThreshold) {
+	          success();
+	          // fail
+	        } else if (epochCounter === epochs) {
+	          fail();
+	          // next sample
+	        } else if (sampleCounter < data.length) {
+	          // console.debug('next sample', sampleCounter, 'of', data.length);
+	          nextSample();
+	          // next epoch
+	        } else {
+	          avgError = 0;
+	          epochCounter += 1;
+	          sampleCounter = 0;
+	          console.debug('next epoch', epochCounter);
 
-	    // callback with results periodically
-	    if (n === 1 || n % callbackFrequency === 0) {
-	      (callback || defaultCallback)(avgError, n);
-	    }
+	          // callback with results periodically
+	          if (epochCounter === 1 || epochCounter % callbackFrequency === 0) {
+	            (callback || defaultCallback)(avgError, epochCounter);
+	          }
+	          nextSample();
+	        }
+	      });
+	    };
 
-	    // success / fail
-	    if (avgError <= errorThreshold) {
-	      console.debug(
-	        'Successfully trained to an error of', avgError, 'after', n, 'epochs.'
-	      );
-	      return false;
-	    } else if (n === epochs) {
-	      console.warn(
-	        'Failed to train. Error is', avgError, 'after', n, 'epochs.'
-	      );
-	    }
-	  }, this);
+	    nextSample();
+	  });
+
+	  // _.each(_.range(epochs), function(index) {
+	  //   var n = index + 1;
+	  //
+	  //   // loop over the training data summing the error of all samples
+	  //   // http://www.researchgate.net/post
+	  //   //   /Neural_networks_and_mean-square_errors#rgw51_55cb2f1399589
+	  //   var avgError = _.sum(_.map(data, function(sample) {
+	  //     // make a prediction
+	  //     this.activate(sample.input);
+	  //
+	  //     // correct the error
+	  //     this.correct(sample.output);
+	  //
+	  //     // get the error
+	  //     return this.errorFn(sample.output, this.output) / data.length;
+	  //   }, this));
+	  //
+	  //   // callback with results periodically
+	  //   if (n === 1 || n % callbackFrequency === 0) {
+	  //     (callback || defaultCallback)(avgError, n);
+	  //   }
+	  //
+	  //   // success / fail
+	  //   if (avgError <= errorThreshold) {
+	  //     console.debug(
+	  //       'Successfully trained to an error of', avgError, 'after', n,
+	  // 'epochs.' ); return false; } else if (n === epochs) { console.warn(
+	  // 'Failed to train. Error is', avgError, 'after', n, 'epochs.' ); } },
+	  // this);
 	};
 
 	module.exports = Network;
 
 
 /***/ },
-/* 7 */
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var ACTIVATION = __webpack_require__(1);

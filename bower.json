@@ -19,6 +19,7 @@
     "ionicons": "~2.0.1",
     "lodash": "~3.10.0",
     "mathjs": "~2.1.1",
-    "paralleljs": "*"
+    "paralleljs": "*",
+    "zousan": "~1.2.1"
   }
 }

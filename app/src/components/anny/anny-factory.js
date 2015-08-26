@@ -24,21 +24,22 @@ function AnnyFactory($rootScope) {
   };
 
   factory.train = function(trainingSet, callback, frequency) {
-    factory.network.train(trainingSet, callback, frequency);
+    return factory.network.train(trainingSet, callback, frequency)
+      .then(function(output) {
+        console.log('finished', output);
+        console.log('Predictions after training:');
 
-    var results = ['Predictions after training:'];
+        _.each(trainingSet, function(sample) {
+          var input = sample.input;
+          factory.network.activate(input).then(function(output) {
+            console.log(
+              '[' + input.toString() + '] == ' + (output >= 0.5) + ' ' + output
+            );
+          });
+        });
 
-    _.each(trainingSet, function(sample) {
-      var input = sample.input;
-      var output = factory.network.activate(input);
-      results.push(
-        '[' + input.toString() + '] == ' + (output >= 0.5) + ' ' + output
-      );
-    });
-
-    console.log(results.join('\n'));
-
-    factory.emitChange();
+        factory.emitChange();
+      });
   };
 
   factory.newNetwork = function(layers) {
