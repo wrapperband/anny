@@ -101,7 +101,7 @@ class Neuron {
       //
       // basic backprop
       //
-      //c.weight -= c.currGradient * this.learningRate; return
+      // c.weight -= c.currGradient * this.learningRate; return
 
       //
       // RProp
@@ -114,25 +114,18 @@ class Neuron {
 
       // set weight update deltas
       if (product > 0) {
-        c.currStep = Math.min(c.currStep * 1.2, stepMax)
+        c.currDelta = Math.min(c.prevDelta * 1.2, stepMax)
+        c.prevGradient = c.currGradient
       } else if (product < 0) {
-        c.currStep = Math.max(c.currStep * 0.5, stepMin)
-      }
-
-      // set curr step size
-      if (product > 0 || product === 0) {
-        c.currStep = -sign * c.currStep
-      } else if (product < 0) {
-        c.currStep = -c.prevStep
-        c.currGradient = 0
+        c.currDelta = Math.max(c.prevDelta * 0.5, stepMin)
+        c.prevGradient = 0
+      } else if (product === 0) {
+        c.currDelta = 0
       }
 
       // update weights
-      c.weight += c.currStep
-
-      c.prevGradient = c.currGradient
-      c.prevStep = c.currStep
-      //console.log(Math.sign(c.currGradient))
+      c.weight -= sign * c.currDelta
+      c.prevDelta = c.currDelta
     })
   }
 
@@ -246,8 +239,8 @@ Neuron.Connection = function Connection(source, target, weight) {
 
   this.prevGradient = 1
   this.currGradient = 1
-  this.currStep = 0.0125
-  this.prevStep = 0.0125
+  this.currDelta = 0.0125
+  this.prevDelta = 0.0125
 }
 
 export default Neuron
