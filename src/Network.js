@@ -206,6 +206,11 @@ class Network {
         return this.errorFn(sample.output, this.output) / data.length
       })
 
+      // call onProgress after the first epoch and every `frequency` thereafter
+      if (n === 1 || n % frequency === 0) {
+        if (onProgress(this.error, n) === false) return false
+      }
+
       // success
       if (this.error <= errorThreshold) {
         onSuccess(this.error, n)
@@ -214,9 +219,6 @@ class Network {
 
       // fail
       if (n === maxEpochs) onFail(this.error, n)
-
-      // call onProgress after the first epoch and every `frequency` thereafter
-      if (n % frequency === 0) return onProgress(this.error, n)
     })
   }
 

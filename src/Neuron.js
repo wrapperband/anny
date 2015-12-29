@@ -79,30 +79,70 @@ class Neuron {
     // set deltas
     // https://en.wikipedia.org/wiki/Backpropagation/#Phase_1:_Propagation
     if (this.isOutput()) {
+      // http://whiteboard.ping.se/MachineLearning/BackProp
+      // delta here is NOT the "error" (difference in output and target output).
+      // it is the derivative of the error function with respect to the input.
+      // it just so happens the derivative of the MSE is "actual - target"
+      //   E(actual) = 0.5 * (target - actual)^2
+      //   see: ERROR.meanSquared
       this.delta = this.output - targetOutput
     } else {
+      const activationDerivative = this.activation.prime(this.input)
       this.delta = _.sum(this.outgoing, ({target, weight}) => {
-        return this.activation.prime(this.input) * weight * target.delta
+        return target.delta * weight * activationDerivative
       })
     }
 
     // adjust weights
     // https://en.wikipedia.org/wiki/Backpropagation/#Phase_2:_Weight_update
-    _.each(this.incoming, connection => {
-      const gradient = connection.source.output * this.delta
-      connection.weight -= gradient * this.learningRate
+    _.each(this.incoming, c => {
+      c.currGradient = c.source.output * this.delta
+
+      //
+      // basic backprop
+      //
+      //c.weight -= c.currGradient * this.learningRate; return
+
+      //
+      // RProp
+      // http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.17.1332&rep=rep1&type=pdf
+      //
+      const product = c.prevGradient * c.currGradient
+      const stepMin = 0
+      const stepMax = 50
+      const sign = Math.sign(c.currGradient)
+
+      // set weight update deltas
+      if (product > 0) {
+        c.currStep = Math.min(c.currStep * 1.2, stepMax)
+      } else if (product < 0) {
+        c.currStep = Math.max(c.currStep * 0.5, stepMin)
+      }
+
+      // set curr step size
+      if (product > 0 || product === 0) {
+        c.currStep = -sign * c.currStep
+      } else if (product < 0) {
+        c.currStep = -c.prevStep
+        c.currGradient = 0
+      }
+
+      // update weights
+      c.weight += c.currStep
+
+      c.prevGradient = c.currGradient
+      c.prevStep = c.currStep
+      //console.log(Math.sign(c.currGradient))
     })
   }
 
   /**
    * Activate this Neuron, setting the input value and computing the output.
-   *   Input Neuron output values will always be equal to their input
-   * value. Bias Neurons always output 1. All other
-   * Neurons will squash their input value to derive their
-   * output.
+   * Input Neuron output values will always be equal to their input value.
+   * Bias Neurons always output 1. All other Neurons will squash their input
+   * value to derive their output.
    * @param {number} [input] - If omitted the input value will be calculated
-   *   from the outputs and weights of the Neurons connected to
-   *   this Neuron.
+   *   from the outputs and weights of the Neurons connected to this Neuron.
    * @returns {number}
    */
   activate(input) {
@@ -203,6 +243,11 @@ Neuron.Connection = function Connection(source, target, weight) {
     // We add one to initialize the weight value as if this connection were
     // already part of the fan.
   this.weight = weight || INITIALIZE.weight(target.incoming.length)
+
+  this.prevGradient = 1
+  this.currGradient = 1
+  this.currStep = 0.0125
+  this.prevStep = 0.0125
 }
 
 export default Neuron
